@@ -666,7 +666,8 @@
         15,
         true,
         false,
-        "perceptual_weighted"
+        "perceptual_weighted",
+        "lab"
       ]
     }
   ],

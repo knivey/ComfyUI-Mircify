@@ -19,34 +19,19 @@ try:
 except ImportError:
     PIL_AVAILABLE = False
 
+from . import colors_lab
+from .irc import (
+    HALF_BLOCK_CHAR,
+    SPACE_CHAR,
+    IRC_COLORS,
+    IRCFormatter,
+    TextFormatter,
+)
+
 
 # ============================================================================
 # CONSTANTS
 # ============================================================================
-
-# 99-color IRC palette - matches Go IRCColorPalette exactly
-IRC_COLORS = [
-    (255, 255, 255), (0, 0, 0), (0, 0, 127), (0, 147, 0), (255, 0, 0),
-    (127, 0, 0), (156, 0, 156), (252, 127, 0), (255, 255, 0), (0, 252, 0),
-    (0, 147, 147), (0, 255, 255), (0, 0, 252), (255, 0, 255), (127, 127, 127),
-    (210, 210, 210), (71, 0, 0), (71, 33, 0), (71, 71, 0), (50, 71, 0),
-    (0, 71, 0), (0, 71, 44), (0, 71, 71), (0, 39, 71), (0, 0, 71),
-    (46, 0, 71), (71, 0, 71), (71, 0, 42), (116, 0, 0), (116, 58, 0),
-    (116, 116, 0), (81, 116, 0), (0, 116, 0), (0, 116, 73), (0, 116, 116),
-    (0, 64, 116), (0, 0, 116), (75, 0, 116), (116, 0, 116), (116, 0, 69),
-    (181, 0, 0), (181, 99, 0), (181, 181, 0), (125, 181, 0), (0, 181, 0),
-    (0, 181, 113), (0, 181, 181), (0, 99, 181), (0, 0, 181), (117, 0, 181),
-    (181, 0, 181), (181, 0, 107), (255, 0, 0), (255, 140, 0), (255, 255, 0),
-    (178, 255, 0), (0, 255, 0), (0, 255, 160), (0, 255, 255), (0, 140, 255),
-    (0, 0, 255), (165, 0, 255), (255, 0, 255), (255, 0, 152), (255, 89, 89),
-    (255, 180, 89), (255, 255, 113), (207, 255, 96), (111, 255, 111), (101, 255, 201),
-    (109, 255, 255), (89, 180, 255), (89, 89, 255), (196, 89, 255), (255, 102, 255),
-    (255, 89, 188), (255, 156, 156), (255, 211, 156), (255, 255, 156), (226, 255, 156),
-    (156, 255, 156), (156, 255, 219), (156, 255, 255), (156, 211, 255), (156, 156, 255),
-    (220, 156, 255), (255, 156, 255), (255, 148, 211), (0, 0, 0), (19, 19, 19),
-    (40, 40, 40), (54, 54, 54), (77, 77, 77), (101, 101, 101), (129, 129, 129),
-    (159, 159, 159), (188, 188, 188), (226, 226, 226), (255, 255, 255)
-]
 
 # ANSI standard colors (0-15)
 ANSI_STANDARD_COLORS = [
@@ -74,8 +59,6 @@ MAX_KMEANS_CLUSTERS = 3
 KMEANS_N_INIT = 10
 
 # Character constants
-HALF_BLOCK_CHAR = "▀"
-SPACE_CHAR = " "
 ANSI_RESET = "\033[0m"
 
 
@@ -158,105 +141,6 @@ class DistanceCalculator:
 # ============================================================================
 # TEXT FORMATTERS
 # ============================================================================
-
-class TextFormatter:
-    """Base class for text formatting operations."""
-    
-    @staticmethod
-    def count_consecutive(items: List, index: int) -> int:
-        """Count consecutive identical entries starting from index."""
-        if index >= len(items):
-            return 0
-            
-        count = 1
-        current = items[index]
-        
-        while index + count < len(items) and items[index + count] == current:
-            count += 1
-        
-        return count
-
-
-class IRCFormatter(TextFormatter):
-    """Handles IRC-specific text formatting."""
-    
-    @staticmethod
-    def format_color_code(fg_color: int, bg_color: Optional[int] = None, is_space: bool = False) -> str:
-        """Format IRC color code with proper padding and space optimization."""
-        if bg_color is None:
-            bg_color = fg_color
-        
-        # Optimize for spaces: if fg == bg, set fg to 0 to save bytes
-        if is_space and fg_color == bg_color:
-            fg_color = 0
-        
-        fg_fmt = f"{fg_color:02d}" if fg_color >= 10 else str(fg_color)
-        bg_fmt = f"{bg_color:02d}" if bg_color >= 10 else str(bg_color)
-        return f"\x03{fg_fmt},{bg_fmt}"
-    
-    @staticmethod
-    def format_line(line_colors: List[Union[int, Tuple[int, int]]]) -> str:
-        """Format a line of IRC color codes with comprehensive duplicate prevention."""
-        if not line_colors:
-            return ""
-        
-        result = []
-        i = 0
-        last_color_code = None  # Track the last color code to prevent duplicates
-        
-        while i < len(line_colors):
-            color_entry = line_colors[i]
-            
-            if isinstance(color_entry, tuple):
-                # Half-block mode
-                top_color, bottom_color = color_entry
-                
-                if top_color == bottom_color:
-                    # Same colors - treat as spaces with background color
-                    count = 1
-                    while (i + count < len(line_colors) and 
-                           isinstance(line_colors[i + count], tuple) and 
-                           line_colors[i + count] == color_entry):
-                        count += 1
-                    
-                    color_code = IRCFormatter.format_color_code(top_color, is_space=True)
-                    if color_code != last_color_code:
-                        result.append(color_code + (SPACE_CHAR * count))
-                        last_color_code = color_code
-                    else:
-                        # Same color code as previous, just add spaces without color code
-                        result.append(SPACE_CHAR * count)
-                    i += count
-                else:
-                    # Different colors - check for consecutive identical half-block patterns
-                    count = 1
-                    while (i + count < len(line_colors) and 
-                           isinstance(line_colors[i + count], tuple) and 
-                           line_colors[i + count] == color_entry):
-                        count += 1
-                    
-                    color_code = IRCFormatter.format_color_code(top_color, bottom_color)
-                    if color_code != last_color_code:
-                        result.append(color_code + (HALF_BLOCK_CHAR * count))
-                        last_color_code = color_code
-                    else:
-                        # Same color code as previous, just add characters without color code
-                        result.append(HALF_BLOCK_CHAR * count)
-                    i += count
-            else:
-                # Full-block mode - treat as spaces with background color
-                count = IRCFormatter.count_consecutive(line_colors, i)
-                color_code = IRCFormatter.format_color_code(color_entry, is_space=True)
-                if color_code != last_color_code:
-                    result.append(color_code + (SPACE_CHAR * count))
-                    last_color_code = color_code
-                else:
-                    # Same color code as previous, just add spaces without color code
-                    result.append(SPACE_CHAR * count)
-                i += count
-        
-        return ''.join(result)
-
 
 class ANSIFormatter(TextFormatter):
     """Handles ANSI terminal text formatting."""
@@ -600,6 +484,7 @@ class IRCArtConverter:
                 "use_16_colors": ("BOOLEAN", {"default": False}),
                 "distance_method": (["weighted_manhattan", "manhattan", "euclidean", "perceptual_weighted"], 
                                    {"default": "perceptual_weighted"}),
+                "color_algorithm": (["lab", "kmeans"], {"default": "lab"}),
             } 
         }
     
@@ -645,7 +530,14 @@ class IRCArtConverter:
         
         if block.numel() == 0:
             return 0, start_y, end_y
-        
+
+        index_map = params.get('index_map')
+        if index_map is not None:
+            start_x = x * params['block_width']
+            end_x = min(start_x + params['block_width'], params['width'])
+            region = index_map[start_y:end_y, start_x:end_x]
+            return colors_lab.majority_vote(region), start_y, end_y
+
         block_color = self.block_processor.get_dominant_color(block)
         color_idx = self.find_irc_color_index(
             block_color, params['use_16_colors'], params['distance_method']
@@ -688,7 +580,8 @@ class IRCArtConverter:
         return line_colors
     
     def convert_to_irc_art(self, image: torch.Tensor, block_width: int, block_height: int,
-                          half_block_mode: bool, use_16_colors: bool, distance_method: str, 
+                          half_block_mode: bool, use_16_colors: bool, distance_method: str,
+                          color_algorithm: str = "lab",
                           prompt=None, extra_pnginfo=None, my_unique_id=None) -> Tuple[torch.Tensor, str, str]:
         """Main conversion function."""
         # Check which outputs are connected
@@ -701,9 +594,20 @@ class IRCArtConverter:
             raise ValueError(f"Expected batch size 1, got {batch_size}")
         
         img = image[0]
-        
-        # Apply color transfer
-        color_transferred_img = self.color_transfer.apply(img, use_16_colors, distance_method)
+
+        # Color algorithm: "kmeans" runs the legacy two-stage RGB KMeans
+        # pipeline (global color transfer + per-block dominant color);
+        # "lab" (default) snaps pixels straight to the IRC palette by
+        # CIE delta-E in CIELAB space and takes a per-block majority
+        # vote - no clustering, perceptually correct matching.
+        if color_algorithm == "kmeans":
+            color_transferred_img = self.color_transfer.apply(img, use_16_colors, distance_method)
+            index_map = None
+        else:
+            palette = IRC_COLORS[:16] if use_16_colors else IRC_COLORS
+            pixels = (img * 255.0).cpu().numpy().astype(np.uint8)
+            index_map = colors_lab.snap_indices(pixels, palette)
+            color_transferred_img = img
         
         # Calculate block dimensions
         blocks_x = width // block_width
@@ -725,7 +629,8 @@ class IRCArtConverter:
             'blocks_x': blocks_x,
             'blocks_y': blocks_y,
             'use_16_colors': use_16_colors,
-            'distance_method': distance_method
+            'distance_method': distance_method,
+            'index_map': index_map
         }
         
         # Process image

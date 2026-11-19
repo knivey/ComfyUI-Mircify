@@ -56,8 +56,10 @@ less -R output/irc_art/your_ansi_file.txt
 - **Half Block Mode**: Option for 8x7.5 pixel blocks for finer resolution
 - **Dominant Color Extraction**: Uses k-means clustering to find the most prominent color in each block
 - **Multiple Distance Methods**: Choose between weighted manhattan, manhattan, euclidean, and perceptual weighted distance calculations
-- **99-Color IRC Palette**: Maps colors to extended IRC color palette
+- **99-Color IRC Palette**: Maps colors to extended IRC color palette (verified against modern.ircdocs.horse/formatting)
 - **16-Color Compatibility Mode**: Option to use traditional 16-color IRC palette
+- **CIELAB Color Matching**: Default `lab` algorithm snaps pixels to the palette by CIE delta-E (1976) — perceptually correct, no clustering, sub-second on 640x448
+- **Legacy KMeans Pipeline**: Selectable via `color_algorithm = "kmeans"` (the original two-stage RGB pipeline)
 - **Dual Text Output**: Returns both IRC-formatted and ANSI-formatted text
 - **ANSI Terminal Support**: Generate ANSI escape sequences for terminal display with 256-color accuracy
 - **Intelligent Output Generation**: Only generates text outputs that are connected, optimizing performance
@@ -93,7 +95,11 @@ Converts images into IRC art with both visual and text output.
 - **block_height**: Height of each block in pixels (default: 15)
 - **half_block_mode**: Enable half-height blocks (8x7.5 instead of 8x15)
 - **use_16_colors**: Use only first 16 IRC colors for compatibility (default: False)
-- **distance_method**: Color distance calculation method (weighted_manhattan/manhattan/euclidean/perceptual_weighted)
+- **distance_method**: Color distance calculation method (weighted_manhattan/manhattan/euclidean/perceptual_weighted) — used by the `kmeans` color algorithm
+- **color_algorithm**: Color matching algorithm (default: `lab`)
+
+  - `lab`: converts to CIELAB and picks the nearest palette entry by CIE delta-E (1976) per pixel, then takes a per-block majority vote. Fast and perceptually correct.
+  - `kmeans`: the legacy two-stage pipeline (global KMeans color transfer + per-block KMeans dominant color) using `distance_method` in RGB space.
 
 **Outputs:**
 - **processed_image**: Visual representation of the IRC art conversion
@@ -185,10 +191,14 @@ exiftool -Comment your_image.png
 
 ## Color Processing
 
-The node uses a two-stage approach:
+Two selectable algorithms (`color_algorithm`):
 
-1. **Color Transfer Phase**: Applies KMeans clustering with configurable distance methods to map the entire image to the IRC color palette
-2. **Block Processing Phase**: Divides the color-corrected image into blocks using dominant color extraction and generates the final IRC art output
+1. **`lab` (default)**: every pixel is snapped directly to the nearest palette entry by CIE delta-E (1976) in CIELAB space (KD-tree lookup), then each block takes a majority vote over its snapped pixels. No clustering.
+2. **`kmeans` (legacy)**: a two-stage approach — global KMeans color transfer maps the image to the palette first, then per-block KMeans extracts a dominant color. `distance_method` selects the RGB-space distance used by both stages.
+
+## IRC Text Emission
+
+The IRC text output uses stateful delta encoding: a color code is emitted only when the effective colors change, and only the parts that changed — `\x03<fg>` (foreground only, background persists per the IRC formatting spec) when just the fg changed, `\x03<fg>,<bg>` otherwise. Spaces with equal fg/bg use the short `\x030,<bg>` form. Each line starts from a fresh color state (one PRIVMSG per line).
 
 ## IRC Color Palette
 
